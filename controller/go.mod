@@ -3,6 +3,7 @@ module controller
 go 1.19
 
 require (
+	github.com/gorilla/websocket v1.5.0
 	k8s.io/apimachinery v0.26.1
 	k8s.io/client-go v0.26.1
 )
