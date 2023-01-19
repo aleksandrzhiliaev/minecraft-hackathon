@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	config, err := clientcmd.BuildConfigFromFlags("", "~/.kube/config")
+	config, err := clientcmd.BuildConfigFromFlags("", "/Users/fawadshah/.kube/config")
 	if err != nil {
 		panic(err)
 	}
@@ -18,11 +18,23 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{})
+	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{
+		LabelSelector: "flinktoid=true",
+	})
 	if err != nil {
 		panic(err)
 	}
+
 	for _, ns := range namespaces.Items {
-		fmt.Println("Namespace:", ns.Name, "Labels:", ns.Labels)
+		pods, err := clientset.CoreV1().Pods(ns.Name).List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println("Namespace:", ns.Name)
+
+		for _, pod := range pods.Items {
+			fmt.Println("Pod:", pod.Name)
+		}
 	}
 }
