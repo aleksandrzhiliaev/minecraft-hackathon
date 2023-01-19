@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -18,7 +19,7 @@ import (
 )
 
 var (
-	minecraftSocketAddress = "116.202.8.204:3567"
+	minecraftSocketAddress = "116.202.8.204:4567"
 	minecraftSocketPath    = "/v1/ws/console"
 	initialPodList         = []string{}
 )
@@ -38,7 +39,10 @@ func main() {
 	podList(clientset)
 	fmt.Println("Initial Pod List:", initialPodList)
 
-	// react on minecraft events in separate goroutine
+	var wg sync.WaitGroup
+
+	// sync k8s pods from minecraft
+	wg.Add(1)
 	go func() {
 		for {
 			err = kubeReactor(clientset)
@@ -46,16 +50,24 @@ func main() {
 				log.Println("kubeReactor error:", err)
 			}
 		}
+		wg.Done()
 	}()
 
-	//observe k8s pods and namespaces in main goroutine
-	for {
-		err = kubeObserver(clientset)
-		if err != nil {
-			log.Println("kubeObserver error:", err)
+	// sync minecraft world from k8s
+	wg.Add(1)
+	go func() {
+		for {
+			err = kubeObserver(clientset)
+			if err != nil {
+				log.Println("kubeObserver error:", err)
+			}
+			time.Sleep(1 * time.Minute)
 		}
-		time.Sleep(1 * time.Minute)
-	}
+		wg.Done()
+	}()
+
+	wg.Wait()
+	log.Println("Finishing controller")
 }
 
 func podList(clientset *kubernetes.Clientset) {
@@ -92,9 +104,7 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 		return fmt.Errorf("failed to list namespaces: %w", err)
 	}
 
-	// init websocket connection begin
 	u := url.URL{Scheme: "ws", Host: minecraftSocketAddress, Path: minecraftSocketPath}
-	log.Printf("connecting to %s", u.String())
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to dial websocket : %w", err)
@@ -118,12 +128,14 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 		podSlice := []string{}
 		for _, pod := range pods.Items {
 			// summon reference: https://minecraft.fandom.com/wiki/Commands/summon
-			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon pig 94 64 -44 {CustomName:"\"`+pod.Name+`\"",CustomNameVisible:1}`))
+			entityName := fmt.Sprintf("%s_%s", pod.Namespace, pod.Name)
+			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon pig -147 63 -307 {CustomName:"\"`+entityName+`\"",CustomNameVisible:1}`))
 			podSlice = append(podSlice, pod.Name)
 
 			if err != nil {
 				return fmt.Errorf("failed to send summon command to minecraft: %w", err)
 			}
+			log.Println("created new entity", entityName)
 		}
 		fmt.Println("Pod list:", podSlice)
 
@@ -159,13 +171,12 @@ func kubeReactor(clientset *kubernetes.Clientset) error {
 	// 1. Watch websocket from minecraft server
 	// 2. Parse message and do some action
 
-	// init websocket connection begin
 	u := url.URL{Scheme: "ws", Host: minecraftSocketAddress, Path: minecraftSocketPath}
-	log.Printf("connecting to %s", u.String())
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to dial websocket : %w", err)
 	}
+	defer c.Close()
 
 	// watch websocket from minecraft server
 	log.Println("watching websocket events...")
@@ -175,26 +186,26 @@ func kubeReactor(clientset *kubernetes.Clientset) error {
 			return fmt.Errorf("failed to read message from websocket: %w", err)
 		}
 
-		//message := []byte(`{"message": "Named entity EntityCow['default_nginx'/374, uuid='71e6341b-4667-4100-bc91-7e7825078df3', l='ServerLevel[world]', x=8.64, y=86.00, z=7.96, cpos=[0, 0], tl=51, v=true] died: default_nginx was slain by AranelSurion", "timestampMillis": 1631834015918, "loggerName": "", "level": "INFO"}`)
-		ns, pod, err := parseMinecraftUserKillMessage(message)
-		if err != nil {
-			log.Println("failed to parse minecraft message:", err)
-			continue
-		}
-		if ns != "" {
-			log.Println("parsed ns:", ns, "pod:", pod)
-			// call k8s to delete pod in ns
-			err = clientset.CoreV1().Pods(ns).Delete(context.Background(), pod, metav1.DeleteOptions{})
-			if err != nil {
-				log.Println("failed to delete pod:", err)
-				continue
-			}
-			log.Println("deleted pod:", pod)
-		}
+		handleMinecraftKillMessage(message, clientset)
 	}
+}
 
-	defer c.Close()
-	return nil
+func handleMinecraftKillMessage(message []byte, clientset *kubernetes.Clientset) {
+	// Message example:
+	//message := []byte(`{"message": "Named entity EntityCow['default_nginx'/374, uuid='71e6341b-4667-4100-bc91-7e7825078df3', l='ServerLevel[world]', x=8.64, y=86.00, z=7.96, cpos=[0, 0], tl=51, v=true] died: default_nginx was slain by AranelSurion", "timestampMillis": 1631834015918, "loggerName": "", "level": "INFO"}`)
+	ns, pod, err := parseMinecraftUserKillMessage(message)
+	if err != nil {
+		log.Println("failed to parse minecraft message:", err)
+		return
+	}
+	if ns != "" {
+		err = clientset.CoreV1().Pods(ns).Delete(context.Background(), pod, metav1.DeleteOptions{})
+		if err != nil {
+			log.Println("failed to delete pod:", err)
+			return
+		}
+		log.Println("deleted pod:", pod)
+	}
 }
 
 func parseMinecraftUserKillMessage(body []byte) (string, string, error) {
@@ -212,8 +223,7 @@ func parseMinecraftUserKillMessage(body []byte) (string, string, error) {
 
 	err := json.Unmarshal(body, &message)
 	if err != nil {
-		log.Println("failed to parse message:", err)
-		return "", "", err
+		return "", "", fmt.Errorf("failed to unmarshal message: %w", err)
 	}
 	if message.Level != "INFO" {
 		return "", "", nil
@@ -221,14 +231,12 @@ func parseMinecraftUserKillMessage(body []byte) (string, string, error) {
 
 	re := regexp.MustCompile(`(?P<ns>[a-z-0-9]+)_(?P<pod>[a-z-0-9]+) was slain by`)
 	if err != nil {
-		log.Println("failed to compile regexp:", err)
-		return "", "", err
+		return "", "", fmt.Errorf("failed to compile regexp: %w", err)
 	}
 
 	// get pod, namespace
 	matches := re.FindStringSubmatch(message.Message)
 	if len(matches) != 3 {
-		log.Println("message find player and entity mismatch, skipping:", message.Message)
 		return "", "", nil
 	}
 	namespace := matches[1]
