@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	minecraftSocketAddress = "0.0.0.0:55000"
-	minecraftSockerPath    = "/v1/console"
+	minecraftSocketAddress = "116.202.8.204:4567"
+	minecraftSocketPath    = "/v1/ws/console"
 )
 
 func main() {
@@ -51,7 +51,7 @@ func kubeObserver(clientset *kubernetes.Clientset) {
 	}
 
 	// init websocket connection begin
-	u := url.URL{Scheme: "ws", Host: minecraftSocketAddress, Path: minecraftSockerPath}
+	u := url.URL{Scheme: "ws", Host: minecraftSocketAddress, Path: minecraftSocketPath}
 	log.Printf("connecting to %s", u.String())
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
@@ -70,7 +70,7 @@ func kubeObserver(clientset *kubernetes.Clientset) {
 			fmt.Println("Pod:", pod.Name)
 
 			// summon reference: https://minecraft.fandom.com/wiki/Commands/summon
-			err = c.WriteMessage(websocket.TextMessage, []byte("/summon cow ~-10 ~ ~"))
+			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon pig 94 64 -44 {CustomName:"\"Nginx\""}`))
 			if err != nil {
 				log.Println("write for this pod:", pod.Name, err)
 				return
