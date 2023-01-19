@@ -70,7 +70,7 @@ func kubeObserver(clientset *kubernetes.Clientset) {
 			fmt.Println("Pod:", pod.Name)
 
 			// summon reference: https://minecraft.fandom.com/wiki/Commands/summon
-			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon pig 94 64 -44 {CustomName:"\"Nginx\""}`))
+			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon pig 94 64 -44 {CustomName:"\"`+pod.Name+`\"",CustomNameVisible:1}`))
 			if err != nil {
 				log.Println("write for this pod:", pod.Name, err)
 				return
