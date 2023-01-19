@@ -18,6 +18,7 @@ import (
 var (
 	minecraftSocketAddress = "116.202.8.204:4567"
 	minecraftSocketPath    = "/v1/ws/console"
+	initialPodList         = []string{}
 )
 
 func main() {
@@ -31,9 +32,33 @@ func main() {
 		panic(err)
 	}
 
+	podList(clientset)
+	fmt.Println("Initial Pod List:", initialPodList)
+
 	for {
 		kubeObserver(clientset)
 		time.Sleep(1 * time.Minute)
+	}
+}
+
+func podList(clientset *kubernetes.Clientset) {
+	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{
+		LabelSelector: "flinktoid=true",
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	for _, ns := range namespaces.Items {
+		pods, err := clientset.CoreV1().Pods(ns.Name).List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		initialPodList = []string{}
+		for _, pod := range pods.Items {
+			initialPodList = append(initialPodList, pod.Name)
+		}
 	}
 
 }
@@ -66,16 +91,44 @@ func kubeObserver(clientset *kubernetes.Clientset) {
 
 		fmt.Println("Namespace:", ns.Name)
 
+		podSlice := []string{}
 		for _, pod := range pods.Items {
 			fmt.Println("Pod:", pod.Name)
 
 			// summon reference: https://minecraft.fandom.com/wiki/Commands/summon
 			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon pig 94 64 -44 {CustomName:"\"`+pod.Name+`\"",CustomNameVisible:1}`))
+			podSlice = append(podSlice, pod.Name)
+
 			if err != nil {
 				log.Println("write for this pod:", pod.Name, err)
 				return
 			}
 		}
+		fmt.Println("Pod list:", podSlice)
+
+		difference := make(map[string]struct{}, len(podSlice))
+		for _, x := range podSlice {
+			difference[x] = struct{}{}
+		}
+		var diff []string
+		for _, x := range initialPodList {
+			if _, found := difference[x]; !found {
+				diff = append(diff, x)
+			}
+		}
+		fmt.Println("Difference:", diff)
+
+		for _, toKill := range diff {
+			if len(diff) > 0 {
+				err = c.WriteMessage(websocket.TextMessage, []byte(`/kill @e[type=item,name="\"`+toKill+`\""]`))
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+
+		initialPodList = podSlice
+		fmt.Println("Updated Pod List:", initialPodList)
 	}
 
 	// loop end, close websocket connection
