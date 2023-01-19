@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: minecraft-hackathon
+  name: minecraft-hackathon
+  namespace: platform-hackathon
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  serviceName: minecraft-hackathon
+  selector:
+    matchLabels:
+      app: minecraft-hackathon
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: minecraft-hackathon
+    spec:
+      containers:
+      - image: itzg/minecraft-server:latest
+        imagePullPolicy: Always
+        name: minecraft-papermc-server
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        env:
+        - name: "TYPE"
+          value: "PAPER"
+        - name: "EULA"
+          value: "TRUE"
+        ports:
+        - containerPort: 25565
+          name: paper
+          protocol: TCP
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
