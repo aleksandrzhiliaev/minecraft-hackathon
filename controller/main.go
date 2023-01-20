@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -73,7 +74,7 @@ func main() {
 
 func podList(clientset *kubernetes.Clientset) {
 	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{
-		LabelSelector: "flinktoid=true",
+		LabelSelector: "kubernetes.io/metadata.name=hub",
 	})
 	if err != nil {
 		panic(err)
@@ -98,6 +99,7 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 	// 1. Get labeled ns
 	// 2. Get pods from namespace
 	// 3. Send summon command for each pod
+	entityType := []string{"pig", "cow", "salmon", "turtle"}
 	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{
 		LabelSelector: "flinktoid=true",
 	})
@@ -134,7 +136,11 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 			if _, ok := createdMinecraftEntities[entityName]; ok {
 				continue
 			}
-			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon turtle -91 63 -428 {CustomName:"\"`+entityName+`\"",CustomNameVisible:1}`))
+
+			selected := entityType[rand.Intn(len(entityType))]
+			summonCommand := `/summon ` + selected + ` -201 64 -499 {CustomName:"\"` + entityName + `\"",CustomNameVisible:1}`
+			fmt.Println(summonCommand)
+			err = c.WriteMessage(websocket.TextMessage, []byte(summonCommand))
 			if err != nil {
 				return fmt.Errorf("failed to send summon command to minecraft: %w", err)
 			}
