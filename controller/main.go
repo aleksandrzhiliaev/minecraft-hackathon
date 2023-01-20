@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	minecraftSocketAddress = "116.202.8.204:4567"
-	minecraftSocketPath    = "/v1/ws/console"
-	initialPodList         = []string{}
+	minecraftSocketAddress   = "116.202.8.204:4567"
+	minecraftSocketPath      = "/v1/ws/console"
+	initialPodList           = []string{}
+	createdMinecraftEntities = map[string]bool{}
 )
 
 func main() {
@@ -129,12 +130,16 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 		for _, pod := range pods.Items {
 			// summon reference: https://minecraft.fandom.com/wiki/Commands/summon
 			entityName := fmt.Sprintf("%s_%s", pod.Namespace, pod.Name)
+			// check if entityName not in createdMinecraftEntities map, so we don't populate world on each run
+			if _, ok := createdMinecraftEntities[entityName]; !ok {
+				continue
+			}
 			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon pig -147 63 -307 {CustomName:"\"`+entityName+`\"",CustomNameVisible:1}`))
-			podSlice = append(podSlice, pod.Name)
-
 			if err != nil {
 				return fmt.Errorf("failed to send summon command to minecraft: %w", err)
 			}
+			podSlice = append(podSlice, pod.Name)
+			createdMinecraftEntities[entityName] = true
 			log.Println("created new entity", entityName)
 		}
 		fmt.Println("Pod list:", podSlice)
