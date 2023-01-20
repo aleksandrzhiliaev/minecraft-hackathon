@@ -62,7 +62,7 @@ func main() {
 			if err != nil {
 				log.Println("kubeObserver error:", err)
 			}
-			time.Sleep(1 * time.Minute)
+			time.Sleep(30 * time.Second)
 		}
 		wg.Done()
 	}()
@@ -131,10 +131,10 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 			// summon reference: https://minecraft.fandom.com/wiki/Commands/summon
 			entityName := fmt.Sprintf("%s_%s", pod.Namespace, pod.Name)
 			// check if entityName not in createdMinecraftEntities map, so we don't populate world on each run
-			if _, ok := createdMinecraftEntities[entityName]; !ok {
+			if _, ok := createdMinecraftEntities[entityName]; ok {
 				continue
 			}
-			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon pig -147 63 -307 {CustomName:"\"`+entityName+`\"",CustomNameVisible:1}`))
+			err = c.WriteMessage(websocket.TextMessage, []byte(`/summon turtle -91 63 -428 {CustomName:"\"`+entityName+`\"",CustomNameVisible:1}`))
 			if err != nil {
 				return fmt.Errorf("failed to send summon command to minecraft: %w", err)
 			}
@@ -158,10 +158,12 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 
 		for _, toKill := range diff {
 			if len(diff) > 0 {
-				err = c.WriteMessage(websocket.TextMessage, []byte(`/kill @e[type=item,name="\"`+toKill+`\""]`))
+				fmt.Println("To Kill:", toKill)
+				err = c.WriteMessage(websocket.TextMessage, []byte(`/kill @e[name="\"`+toKill+`\""]`))
 				if err != nil {
 					panic(err)
 				}
+				fmt.Println("Killed:", toKill)
 			}
 		}
 
