@@ -74,7 +74,8 @@ func main() {
 
 func podList(clientset *kubernetes.Clientset) {
 	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{
-		LabelSelector: "kubernetes.io/metadata.name=hub",
+		//LabelSelector: "kubernetes.io/metadata.name=hub",
+		LabelSelector: "flinktoid=true",
 	})
 	if err != nil {
 		panic(err)
@@ -99,8 +100,9 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 	// 1. Get labeled ns
 	// 2. Get pods from namespace
 	// 3. Send summon command for each pod
-	entityType := []string{"pig", "cow", "salmon", "turtle"}
+	entityType := []string{"pig", "cow", "turtle"}
 	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{
+		//LabelSelector: "kubernetes.io/metadata.name=hub",
 		LabelSelector: "flinktoid=true",
 	})
 	if err != nil {
