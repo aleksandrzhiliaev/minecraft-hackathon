@@ -74,8 +74,8 @@ func main() {
 
 func podList(clientset *kubernetes.Clientset) {
 	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{
-		//LabelSelector: "kubernetes.io/metadata.name=hub",
-		LabelSelector: "flinktoid=true",
+		LabelSelector: "kubernetes.io/metadata.name=hub",
+		// LabelSelector: "flinktoid=true",
 	})
 	if err != nil {
 		panic(err)
@@ -102,8 +102,8 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 	// 3. Send summon command for each pod
 	entityType := []string{"pig", "cow", "turtle"}
 	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{
-		//LabelSelector: "kubernetes.io/metadata.name=hub",
-		LabelSelector: "flinktoid=true",
+		LabelSelector: "kubernetes.io/metadata.name=hub",
+		// LabelSelector: "flinktoid=true",
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list namespaces: %w", err)
@@ -117,10 +117,10 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 	defer c.Close()
 
 	// cleanup world first
-	err = c.WriteMessage(websocket.TextMessage, []byte("/kill @e[type=item]"))
-	if err != nil {
-		return fmt.Errorf("failed to send kill command to minecraft: %w", err)
-	}
+	// err = c.WriteMessage(websocket.TextMessage, []byte("/kill @e[type=item]"))
+	// if err != nil {
+	// 	return fmt.Errorf("failed to send kill command to minecraft: %w", err)
+	// }
 
 	for _, ns := range namespaces.Items {
 		pods, err := clientset.CoreV1().Pods(ns.Name).List(context.Background(), metav1.ListOptions{})
@@ -134,19 +134,19 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 		for _, pod := range pods.Items {
 			// summon reference: https://minecraft.fandom.com/wiki/Commands/summon
 			entityName := fmt.Sprintf("%s_%s", pod.Namespace, pod.Name)
+			podSlice = append(podSlice, pod.Name)
 			// check if entityName not in createdMinecraftEntities map, so we don't populate world on each run
 			if _, ok := createdMinecraftEntities[entityName]; ok {
 				continue
 			}
-
 			selected := entityType[rand.Intn(len(entityType))]
-			summonCommand := `/summon ` + selected + ` -201 64 -499 {CustomName:"\"` + entityName + `\"",CustomNameVisible:1}`
+			summonCommand := `/summon ` + selected + ` -122 63 -326 {CustomName:"\"` + entityName + `\"",CustomNameVisible:1}`
 			fmt.Println(summonCommand)
 			err = c.WriteMessage(websocket.TextMessage, []byte(summonCommand))
 			if err != nil {
 				return fmt.Errorf("failed to send summon command to minecraft: %w", err)
 			}
-			podSlice = append(podSlice, pod.Name)
+
 			createdMinecraftEntities[entityName] = true
 			log.Println("created new entity", entityName)
 		}
@@ -167,7 +167,9 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 		for _, toKill := range diff {
 			if len(diff) > 0 {
 				fmt.Println("To Kill:", toKill)
-				err = c.WriteMessage(websocket.TextMessage, []byte(`/kill @e[name="\"`+toKill+`\""]`))
+				summonCmd := []byte(`/kill @e[name=` + ns.Name + "_" + toKill + `]`)
+				fmt.Println(summonCmd)
+				err = c.WriteMessage(websocket.TextMessage, summonCmd)
 				if err != nil {
 					panic(err)
 				}
