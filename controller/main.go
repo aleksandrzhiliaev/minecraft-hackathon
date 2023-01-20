@@ -167,13 +167,13 @@ func kubeObserver(clientset *kubernetes.Clientset) error {
 		for _, toKill := range diff {
 			if len(diff) > 0 {
 				fmt.Println("To Kill:", toKill)
-				summonCmd := []byte(`/kill @e[name=` + ns.Name + "_" + toKill + `]`)
+				summonCmd := `/kill @e[name=` + ns.Name + "_" + toKill + `]`
 				fmt.Println(summonCmd)
-				err = c.WriteMessage(websocket.TextMessage, summonCmd)
+				err = c.WriteMessage(websocket.TextMessage, []byte(summonCmd))
 				if err != nil {
 					panic(err)
 				}
-				fmt.Println("Killed:", toKill)
+				fmt.Println("Kill command ran:", summonCmd)
 			}
 		}
 
